@@ -145,8 +145,13 @@ Script failure notifications can be enabled/disabled by opening the spreadsheet 
 #### If the script is running every minute, is it possible for two different runs to overlap and execute concurrently?
 Elephant Grass makes use of [Lock Service](https://developers.google.com/apps-script/reference/lock/) to prevent this from happening.  So far in our testing, no concurrent runs have occurred.
 
+#### Where did the 'Elephant Grass' name come from?
+http://gatherer.wizards.com/Pages/Card/Details.aspx?printed=false&multiverseid=3661
+
 #### Wouldn't it make more sense to release Elephant Grass as a Thunderbird/Mail.app/[insert email client here] plugin?
 Maybe so! Then Elephant Grass certainly wouldn't be limited to Google's quotas.
 
 However, this was an initial release targeting the Gmail web interface, since it is probably used by far more people.
+
+> A Timbo White & @jespow collaboration
 

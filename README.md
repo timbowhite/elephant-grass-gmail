@@ -4,12 +4,12 @@ Elephant Grass is an open-source Gmail script that requests Bitcoin payments fro
 
 
 ### Releases
-[Elephant Grass v0.4](link-goes-here)
+2015-06-02 - [Elephant Grass v0.4](https://docs.google.com/a/elephantgrass.io/spreadsheets/d/1Xa0okYVmjOwn14dxFqoDh39aczD7loYdB6MJQht9igo/copy?usp=sharing)
 
 How To Install
 -------------
 1. Login to your Google account.
-2. Click the release link above to copy the Elephant Grass spreadsheet and script to your Google Drive.
+2. Click the most recent release link above to copy the Elephant Grass spreadsheet and script to your Google Drive.
 3. Open the spreadsheet.  The config options for the script will be displayed on the first sheet.  Put your Bitcoin address in the **Value column** on the **Bitcoin Address** row.  Modify any other config options (these can be changed later at anytime).
 4. On the spreadsheet's menu, click **Run > Process Inbox + Check For Payments**.  Click **Accept** to authorize the script when prompted.
 
@@ -33,13 +33,13 @@ Elephant Grass is a Google Apps Script that's bound to a custom Google Spreadshe
 
 On each run, it performs the following:
 
-1. Adds all of your contacts to a whitelist on the spreadsheet.  Whitelisted senders are never asked to make a payment for an email.
+1. Adds all of your contacts to a whitelist on the spreadsheet.  Emails from whitelisted senders are ignored, and are never autoreplied to with a payment request.
 2. Scans your inbox and spam folder for unread messages.  If the sender is not whitelisted, they are sent an autoreply payment request containing a unique Bitcoin address and payment amount.  The email is then given a "payment pending" label and moved from your inbox to the archive.
 3. Checks for payments made on outstanding payment requests.  If a payment was made, the sender's original email(s) are moved back to your inbox and given a "payment complete" label.  The sender is then added to the greylist.
 4. If a sender has made enough payments, they are automatically moved from the greylist to a whitelist.
 5. If too many payment requests have gone unpaid by a sender, they are moved to a blacklist.  Email from senders on the blacklist are always moved to the archive and never labeled or autoreplied to.
 
-The script has a bunch of configuration options including amount of Bitcoin to request, which emails to search and process, and how it.  These options can be specified on the spreadsheet's config sheet.  All data pertaining to the script's operations are also stored in the spreadsheet.
+The script has a bunch of configuration options including amount of Bitcoin to request and which emails to search and process.  These options can be specified on the spreadsheet's config sheet.  All data pertaining to the script's operations are also stored in separate sheets on the spreadsheet.
 
 ----------
 
@@ -102,7 +102,7 @@ You shouldn't. It's strongly suggested that you first test and verify it with a 
 You can also manually inspect and edit the script code by opening the spreadsheet and clicking **Tools > Script Editor...**.
 
 #### Why don't you release this as a Google add-on?
-Because Google needs to approve add-ons before they can be published.  Also, Google add-ons are limited to running automatically [at most once per hour](https://developers.google.com/apps-script/guides/triggers/installable#time-driven_triggers).  Neither of these requirements were good enough.
+Google needs to approve add-ons before they can be published.  Also, Google add-ons are limited to running automatically [at most once per hour](https://developers.google.com/apps-script/guides/triggers/installable#time-driven_triggers).  These limitations ruled out publishing this project an add-on.
 
 #### Why does this script need to run periodically?
 To monitor your inbox. Google Apps scripting does not have a trigger that's fired when a new email arrives in your inbox.  The best that can be done is to periodically check for new email to process every 1 minute.
@@ -133,6 +133,15 @@ Because Google Apps scripting has [a number of limitations](https://developers.g
 
 Because of these limitations, and the fact that Google Apps scripting operations are really slow, Elephant Grass has impose its own limitations so the it can tread carefully and run as efficiently as possible.
 
+#### I think Elephant Grass stopped processing my inbox. There are no recent runs or errors in the log sheet. What gives?
+It's possible that Elephant Grass can exceed the 1 hour per day script execution limit.  In this case, Google will block any subsequent runs of the script, and so no errors will be logged by the script.  
+
+If this occurs, you'll receive an email notification from **apps-scripts-notifications@google.com** at some point informing you that the execution time limit has been reached.
+
+Best thing to do is just wait until the time limit has expired.
+
+Script failure notifications can be enabled/disabled by opening the spreadsheet and clicking **Tools > Script editor...**. Then in the script editor's menu, click **Resources > Current project's triggers...** and click the **notifications** link beneath **processInboxCheckPayments**.
+
 #### If the script is running every minute, is it possible for two different runs to overlap and execute concurrently?
 Elephant Grass makes use of [Lock Service](https://developers.google.com/apps-script/reference/lock/) to prevent this from happening.  So far in our testing, no concurrent runs have occurred.
 
@@ -140,3 +149,4 @@ Elephant Grass makes use of [Lock Service](https://developers.google.com/apps-sc
 Maybe so! Then Elephant Grass certainly wouldn't be limited to Google's quotas.
 
 However, this was an initial release targeting the Gmail web interface, since it is probably used by far more people.
+

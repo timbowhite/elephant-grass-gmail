@@ -59,7 +59,7 @@ Lists of emails that have been categorized by the script.  You can manually add,
   * **greylist** - email addresses of senders who've been autoreplied to and have made payments.  These senders will still be autoreplied to if a certain number of days of have passed since the last email you've received from them (see the **Autoreply Limit Days** config options).  See also the **Move Sender on Greylist to Whitelist After X Payments** config option.
   * **blacklist** - senders who you want to ignore.  Their emails will always be archived, and never autoreplied to.  See the **Blacklist Sender After X Expired Payments** config option.
 
-If an email address happens to show up in any two addresses at the same time, the Elephant Grass script will automatically remove the duplicate email from the darker list.
+If an email address happens to show up in any two lists at the same time, the Elephant Grass script will automatically remove the duplicate email from the darker list.
 
 ##### bounced
 A list of emails that have been labeled as "payment pending" and moved to the archive, and optionally autoreplied to.  Rows that have a **Bitcoin address** and a **Bounced** date have been autoreplied to.  Rows that do not are emails from senders who've already been autoreplied in response to a prior email.

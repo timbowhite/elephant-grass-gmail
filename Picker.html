@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons.css">
+  <script type="text/javascript">
+    var DIALOG_DIMENSIONS = {
+        width: 800,
+        height: 600
+    };
+    var pickerApiLoaded = false;
+ 
+    function onApiLoad() {
+        gapi.load('picker', {
+            'callback': function() {
+                pickerApiLoaded = true;
+            }
+        });
+        google.script.run
+        .withSuccessHandler(createPicker)
+        .withFailureHandler(showError)
+        .getOAuthToken();
+    }
+ 
+    function createPicker(token) {
+ 
+        if (pickerApiLoaded && token) {
+ 
+            var docsView = new google.picker.DocsView()
+                .setIncludeFolders(true)
+                .setMimeTypes('vnd.google-apps.spreadsheet,application/vnd.google-apps.ritz')
+                .setMode(google.picker.DocsViewMode.LIST)
+                .setSelectFolderEnabled(false);
+ 
+            var picker = new google.picker.PickerBuilder()
+                .addView(docsView)
+                .enableFeature(google.picker.Feature.NAV_HIDDEN)
+                .hideTitleBar()
+                //.setSize(DIALOG_DIMENSIONS.width - 50, DIALOG_DIMENSIONS.height - 50)
+                .setOAuthToken(token)
+                .setCallback(pickerCallback)
+                .setOrigin('https://docs.google.com')
+                .build();
+ 
+            picker.setVisible(true);
+ 
+        }
+        else {
+            showError('Unable to load the file picker.');
+        }
+    }
+ 
+    /**
+     * A callback function that extracts the chosen document's metadata from the
+     * response object. For details on the response object, see
+     * https://developers.google.com/picker/docs/result
+     *
+     * @param {object} data The response object.
+     */
+    function pickerCallback(data) {
+        var action = data[google.picker.Response.ACTION];
+        if (action == google.picker.Action.PICKED) {
+            var doc = data[google.picker.Response.DOCUMENTS][0];
+            var id = doc[google.picker.Document.ID];
+ 
+            google.script.run
+            .withSuccessHandler(showResult) // this will call the google apps script function in your Code.gs file
+            .importSpreadsheet(id); // this is a function in your JavaScript section where you will do something with the code you got from your apps script function  
+
+            // Show the ID of the Google Drive folder
+            document.getElementById('result').innerHTML = 'Importing, this could take up to a minute...';
+            return;
+        }
+        if (action == google.picker.Action.CANCEL) {
+            google.script.host.close();
+            return;
+        }
+    }
+    
+    function showResult(result){
+      if (result === true){
+        result = 'Done. Data imported successfully. You can close this box.';
+      }
+      else{
+        result = 'Failed because: ' + result;
+      }
+      document.getElementById('result').innerHTML = result;
+    }
+ 
+    function showError(message) {
+        document.getElementById('result').innerHTML = 'Error: ' + message;
+    }
+  </script>
+</head>
+ 
+<body>
+    <div>
+        <p id='result'></p>
+    </div>
+    <script type="text/javascript" src="https://apis.google.com/js/api.js?onload=onApiLoad"></script>
+</body>
+</html>

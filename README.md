@@ -101,7 +101,9 @@ You shouldn't. It's strongly suggested that you first test and verify it with a 
 5. Optionally send Bitcoin payments on behalf of senders.  The addresses are available in the **bounced** sheet as well as your Gmail "Sent Mail". 
 6. Verify the results. Unpaid emails from strangers get autoreplied, labeled, and archived. Paid emails get restored back to your inbox. Emails from your contacts will be left untouched.
 
-You can also manually inspect and edit the script code by opening the spreadsheet and clicking **Tools > Script Editor...**.
+Note that none of your email info or contacts info is shared with any other parties or services.  The script runs on Google's servers. The only info that get passed to a 3rd party is your Bitcoin addresses: your main Bitcoin address is passed to blockchain.info to create forwarding addresses, and your forwarding addresses are passed to blockr.io for payment monitoring. 
+
+You can manually inspect and edit the script code by opening the spreadsheet and clicking **Tools > Script Editor...**.
 
 #### Why don't you release this as a Google add-on?
 Google needs to approve add-ons before they can be published.  Also, Google add-ons are limited to running automatically [at most once per hour](https://developers.google.com/apps-script/guides/triggers/installable#time-driven_triggers).  These limitations ruled out publishing this project an add-on.

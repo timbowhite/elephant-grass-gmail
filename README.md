@@ -95,9 +95,11 @@ FAQ
 You shouldn't. It's strongly suggested that you first test and verify it with a throwaway email account before using it on a real email account.  It's pretty easy to do:
 
 1. Create a throwaway Gmail account.
-2. Fill up its inbox with email from various senders using a service like [mailbait.info](http://mailbait.info) (not affiliated in anyway).
-3. Add/create some fake contacts.
-3. Install Elephant Grass using the instructions above and let it run, verify the results.
+2. Fill up its inbox with email from various senders using a service like [guerrillamail.com](https://www.guerrillamail.com) or [mailbait.info](http://mailbait.info) (not affiliated in anyway).
+3. Optionally add/create some fake contacts.
+4. Install Elephant Grass using the instructions above and let it run.
+5. Optionally send Bitcoin payments on behalf of senders.  The addresses are available in the **bounced** sheet as well as your Gmail "Sent Mail". 
+6. Verify the results. Unpaid emails from strangers get autoreplied, labeled, and archived. Paid emails get restored back to your inbox. Emails from your contacts will be left untouched.
 
 You can also manually inspect and edit the script code by opening the spreadsheet and clicking **Tools > Script Editor...**.
 

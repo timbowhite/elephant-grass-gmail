@@ -5,7 +5,7 @@ Elephant Grass is an open-source Gmail script that requests Bitcoin payments fro
 Releases
 -------------
 
-2015-06-04 [Elephant Grass v0.5](https://docs.google.com/spreadsheets/d/1Ffn7O5y7iElzmRbj4LzVx4SMHpcyKK7NVi_RaJxoF2c/copy?usp=sharing)
+2015-06-05 - [Elephant Grass v0.5](https://docs.google.com/spreadsheets/d/1Ffn7O5y7iElzmRbj4LzVx4SMHpcyKK7NVi_RaJxoF2c/copy?usp=sharing)
 
   * bug fix: don't autoreply to messages that have been manually replied to by user
   * bug fix: autoreply to first sender in a thread, not last

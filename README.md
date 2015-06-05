@@ -2,9 +2,18 @@ Elephant Grass
 ===================
 Elephant Grass is an open-source Gmail script that requests Bitcoin payments from unknown email senders.  If the sender pays you, their email makes it to your inbox.
 
+Releases
+-------------
 
-### Releases
+2015-06-04 [Elephant Grass v0.5](https://docs.google.com/spreadsheets/d/1Ffn7O5y7iElzmRbj4LzVx4SMHpcyKK7NVi_RaJxoF2c/copy?usp=sharing)
+
+  * bug fix: don't autoreply to messages that have been manually replied to by user
+  * bug fix: autoreply to first sender in a thread, not last
+  * bug fix: archive/label emails that don't require an autoreply even if outgoing daily email limit has been reached
+
 2015-06-02 - [Elephant Grass v0.4](https://docs.google.com/a/elephantgrass.io/spreadsheets/d/1Xa0okYVmjOwn14dxFqoDh39aczD7loYdB6MJQht9igo/copy?usp=sharing)
+  
+  * initial release
 
 How To Install
 -------------
@@ -17,9 +26,11 @@ This will execute a first run of the script and, by default, will scan your inbo
 
 How To Upgrade To The Latest Version
 -------------
+If you've already copied Elephant Grass to your Google Drive and run it, follow these steps to upgrade to the latest version: 
+
 1. Login to your Google account.
 2. Open your current Elephant Grass spreadsheet.
-3. On the spreadsheet's menu, click **Run > Stop Running Automatically**.  This will prevent this spreadsheet from processing your inbox concurrently with the new version.
+3. On the spreadsheet's menu, click **Run > Stop Running Automatically**.  This will prevent this old spreadsheet from processing your inbox concurrently with the new version.
 4. Copy the new version of the Elephant Grass spreadsheet to your Google Drive using the link above.
 5. Open the **new version** of the Elephant Grass spreadsheet, and click **Run > Import Data Spreadsheet Data**. Click **Accept** to authorize the script when prompted.
 6. When the file picker dialog opens, select the **old** version of your Elephant Grass spreadsheet and click **Select**.  This will import all of your data and settings into the new Elephant Grass version.
@@ -36,12 +47,14 @@ On each run, it performs the following:
 1. Adds all of your contacts to a whitelist on the spreadsheet.  Emails from whitelisted senders are ignored, and are never autoreplied to with a payment request.
 2. Scans your inbox and spam folder for unread messages.  If the sender is not whitelisted, they are sent an autoreply payment request containing a unique Bitcoin address and payment amount.  The email is then given a "payment pending" label and moved from your inbox to the archive.
 3. Checks for payments made on outstanding payment requests.  If a payment was made, the sender's original email(s) are moved back to your inbox and given a "payment complete" label.  The sender is then added to the greylist.
-4. If a sender has made enough payments, they are automatically moved from the greylist to a whitelist.
+4. If a sender has made enough payments, they are automatically moved from the greylist to the whitelist.
 5. If too many payment requests have gone unpaid by a sender, they are moved to a blacklist.  Email from senders on the blacklist are always moved to the archive and never labeled or autoreplied to.
 
 The script has a bunch of configuration options including amount of Bitcoin to request and which emails to search and process.  These options can be specified on the spreadsheet's config sheet.  All data pertaining to the script's operations are also stored in separate sheets on the spreadsheet.
 
-----------
+Important Notices
+-------------
+  * If you have over 100 emails from different senders in your inbox, you may want to move them out of your inbox before running Elephant Grass.  Google limits Gmail users to sending to at most [100 different recipients per day](https://developers.google.com/apps-script/guides/services/quotas).  Elephant Grass will process as many emails as it can, but you may see some errors in the **log** sheet if Google's limits are exceeded.
 
 The Spreadsheet
 -------------
@@ -101,7 +114,7 @@ You shouldn't. It's strongly suggested that you first test and verify it with a 
 5. Optionally send Bitcoin payments on behalf of senders.  The addresses are available in the **bounced** sheet as well as your Gmail "Sent Mail". 
 6. Verify the results. Unpaid emails from strangers get autoreplied, labeled, and archived. Paid emails get restored back to your inbox. Emails from your contacts will be left untouched.
 
-Note that none of your email info or contacts info is shared with any other parties or services.  The script runs on Google's servers. The only info that get passed to a 3rd party is your Bitcoin addresses: your main Bitcoin address is passed to blockchain.info to create forwarding addresses, and your forwarding addresses are passed to blockr.io for payment monitoring. 
+Note that none of your email info or contacts info is shared with any other parties or services.  The script runs on Google's servers. The only info that gets passed to a 3rd party is your Bitcoin addresses: your main Bitcoin address is passed to blockchain.info to create forwarding addresses, and your forwarding addresses are passed to blockr.io for payment monitoring. 
 
 You can manually inspect and edit the script code by opening the spreadsheet and clicking **Tools > Script Editor...**.
 

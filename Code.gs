@@ -1,7 +1,7 @@
 /* global config and constants */
 var config = {},
     constants = {
-      version: '0.4',
+      version: '0.5',
       bitcoinReceiveAddressApiUrl: 'https://blockchain.info/api/receive?method=create&address={BITCOIN_ADDRESS}',
       bitcoinMonitorAddressApiUrl: 'http://btc.blockr.io/api/v1/address/info/{BITCOIN_ADDRESSES}?confirmations={CONFIRMATIONS}',
       bitcoinQrCodeApiUrl: 'https://blockchain.info/qr?data={BITCOIN_ADDRESS}?amount={BITCOIN_AMOUNT}',
@@ -14,6 +14,10 @@ var config = {},
       checkPayments:{
         frequencyMin: 15, // min # of minutes to check for payments
         excludeAddress: []
+      },
+      errorRegex: {
+        serviceLimit: (/Service invoked too many times for one day/ig),
+        invalidEmail: (/Invalid email/i)
       },
       autorunFunction: 'processInboxCheckPayments',
       ss: SpreadsheetApp.getActive(),
@@ -715,6 +719,20 @@ function stopAutorun(){
 }
 
 /**
+ * Returns an array of strings of the user's email addresses including aliases
+ *
+ * @return array
+ */
+function getMyEmailAddresses(){
+  var myaddy = GmailApp.getAliases() || [],
+      x;
+  if ((x = Session.getEffectiveUser().getEmail()) && myaddy.indexOf(x) === -1){
+    myaddy.push(x);
+  }
+  return myaddy;
+}
+
+/**
  * - Reads in the white/grey/blacklists from spreadsheet to config object
  * - syncs contacts from "My Contacts" to whitelist
  * - ensures no single email address appears in any two lists at the same time
@@ -728,8 +746,7 @@ function initLists(opt){
   var i, j, k, u, v, x, y, 
       sheet = constants.ss.getSheetByName(constants.sheets.lists.name),
       sheetdata,
-      myemail,
-      aliases,
+      myaddy,
       contacts,
       range;
   
@@ -764,10 +781,8 @@ function initLists(opt){
   for(i = 0, j = contacts.length; i < j; i++) addContactEmailsToListCache(contacts[i], 'whitelist');
   
   // ensure this account + aliases are in email whitelist cache
-  aliases = GmailApp.getAliases();
-  myemail = Session.getEffectiveUser().getEmail();
-  if (myemail) aliases.push(myemail);
-  for(i = 0, j = aliases.length; i < j ; i++) addContactEmailsToListCache(aliases[i], 'whitelist');
+  myaddy = getMyEmailAddresses();
+  for(i = 0, j = myaddy.length; i < j ; i++) addContactEmailsToListCache(myaddy[i], 'whitelist');
 
   syncListsToSpreadsheet({flush: true});
   
@@ -831,8 +846,12 @@ function _processInbox(){
       body,
       replyOpt,
       threadLabels,
+      threadLabelsNames = [],
       ignore,
-      aborted = false;
+      aborted = false,
+      cannotreply = false,
+      sent,
+      myaddy = getMyEmailAddresses();
   
   // thread processing loop
   do  {
@@ -856,23 +875,30 @@ function _processInbox(){
 
       // ignore whitelisted contacts
       if (config.lists.whitelist.emails.indexOf(from) !== -1) continue;
-
+      
       thread = message.getThread();
       threadId = thread.getId();
       
       // bogus thread id or already paid thread
       if (! threadId || (sheetCacheIndexOf(sheetPaidData.threadId, threadId) !== -1)) continue;
       
-      // ignore threads w/ payment complete or payment pending label
-      ignore = false;
+      // ignore threads w/ payment complete label
       threadLabels = thread.getLabels();
-      for (x = 0, y = threadLabels.length; x < threadLabels.length; x++) {
-        if (threadLabels[x].getName() === config.payment_received_label){
-          ignore = true;
-          break;
+      threadLabelsNames = [];
+      for (x = 0, y = threadLabels.length; x < y; x++) threadLabelsNames.push(threadLabels[x].getName());
+      if (threadLabelsNames.indexOf(config.payment_received_label) !== -1) continue;
+      
+      // ignore if original message has been replied to manually by user and does not have pending payment label
+      if (threadLabelsNames.indexOf(config.payment_pending_label) === -1){
+        ignore = false;
+        for (x = 1, y = messages[i].length; x < y; x++){
+          if (myaddy.indexOf(from2email(messages[i][x].getFrom())) !== -1){
+              ignore = true;
+              break;
+          }
         }
+        if (ignore) continue;
       }
-      if (ignore) continue;
 
       todo = {
         addrow: true,
@@ -912,6 +938,9 @@ function _processInbox(){
       
       // autoreply
       if (todo.bounce){
+        // reached daily email limit? then leave this email untouched for next run
+        if (cannotreply) break;
+        
         amount = config.bitcoin_amount;
         
         // get bitcoin receive address        
@@ -948,19 +977,30 @@ function _processInbox(){
         // use html?
         replyOpt = {};
         if (config.autoreply_html) replyOpt.htmlBody = body.split("\n").join("<br/>");
+        sent = true;
         
-        // catch quota exceeded errors
         try{
-          thread.reply(body, replyOpt);
+          message.reply(body, replyOpt);
         }
         catch(e){
           log.errors.push(arguments.callee.name + 
            ' failed to send autoreply for threadId = ' + threadId + 
            ', subject = ' + thread.getFirstMessageSubject() + ' : ' + err2str(e));
-          aborted = true;
-          break;
+          
+          sent = false;
+          
+          // outgoing email limit reached? skip it.
+          if (constants.errorRegex.serviceLimit.test(e.toString())){
+            cannotreply = true;
+            continue;
+          }
+          
+          // if its not an invalid reply-to address, skip it.
+          // invalid reply-to address still get archived+labeled
+          if (! constants.errorRegex.invalidEmail.test(e.toString())) continue;
         }
-        log.emailsBounced++;
+        cannotreply = false;
+        if (sent) log.emailsBounced++;
       }
       
       // queue to archive

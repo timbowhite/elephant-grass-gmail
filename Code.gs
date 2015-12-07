@@ -1,12 +1,13 @@
 /* global config and constants */
 var config = {},
     constants = {
-      version: '0.5',
+      version: '0.6',
       bitcoinReceiveAddressApiUrl: 'https://blockchain.info/api/receive?method=create&address={BITCOIN_ADDRESS}',
       bitcoinMonitorAddressApiUrl: 'http://btc.blockr.io/api/v1/address/info/{BITCOIN_ADDRESSES}?confirmations={CONFIRMATIONS}',
       bitcoinQrCodeApiUrl: 'https://blockchain.info/qr?data={BITCOIN_ADDRESS}?amount={BITCOIN_AMOUNT}',
       bitcoinDecimals: 8,
       bitcoinBitsMultiplier: 1000000,
+      bitcoinReceiveAddressAttempts: 5, // max attemps at getting a unique btc address from bc.i
       myContactsGroupName: 'System Group: My Contacts',
       autoReplyLimitDaysMin: 1,
       isAutorun: false, // flag that this run was initiated by a timed trigger
@@ -20,6 +21,7 @@ var config = {},
         invalidEmail: (/Invalid email/i)
       },
       autorunFunction: 'processInboxCheckPayments',
+      autoreplyAddress: ['no-­reply@accounts.google.com', 'mailer­-daemon@google.com', 'apps-scripts-notifications@google.com'],  // senders of autoreplies/no-replies
       ss: SpreadsheetApp.getActive(),
       sheets:{
         config: {
@@ -424,6 +426,66 @@ function addContactEmailsToListCache(contact, list){
   }
 }
 
+/**
+ * quotes a message's text for inclusion in a reply
+ *
+ * @param {object} message      gmail message object
+ * @return {string}
+ */
+function quoteMessage(message){
+  var from = from2email(message.getFrom());
+  
+  // html
+  if (config.autoreply_html){ 
+    return '<div class="gmail_extra"><br><div class="gmail_quote">' +
+      'On ' + message.getDate().toString() + ', <a href="mailto:' + from + '" target="_blank">' + from + '</a> wrote:<br>' +
+      '<blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex">' +
+      message.getBody().trim() + 
+      '</blockquote></div><br></div>';
+  }
+
+  // text
+  return 'On ' + message.getDate().toString() + ', ' + from + " wrote:\n" +
+    message.getPlainBody().trim().replace(/^/gm, '> ');
+}
+
+/**
+ * Determines if the thread/messages contain any autoreplies from external senders
+ *
+ * @param {mixed} messagse    gmailthread object or array of gmailmessage's
+ * @return {bool}
+ */
+function isExternalAutoreply(messages){
+  var i, j, from, replyto, headers, 
+      headerRegex = /^Return-Path:\s+<>|Precedence:\s+auto_reply|Auto-Submitted:\s+(?!no)|X-Autoreply:|X-Autorespond:/m;
+  
+  if (typeof(messages) === 'object' && (! (messages instanceof Array))){
+    messages = messages.getMessages();
+  }
+
+  for (i = 0, j = messages.length; i < j; i++){
+    // check against known autoreply/mail delivery senders for gmail
+    from = from2email(messages[i].getFrom());
+    if (constants.autoreplyAddress.indexOf(from) !== -1) return true;
+    
+    // ignore whitelist/blacklist
+    if (config.lists.whitelist.emails.indexOf(from) !== -1 || config.lists.blacklist.emails.indexOf(from) !== -1) continue;
+    
+    // same thing w/ replyto
+    replyto = from2email(messages[i].getReplyTo());
+    if (replyto && replyto !== from){
+      if (constants.autoreplyAddress.indexOf(replyto) !== -1) return true;
+      if (config.lists.whitelist.emails.indexOf(replyto) !== -1 || config.lists.blacklist.emails.indexOf(replyto) !== -1) continue;
+    }
+    
+    // inspect headers (this is expensive)
+    headers = messages[i].getRawContent().trim().split(/\r?\n\r?\n/, 1)[0];
+    if (headerRegex.test(headers)) return true;
+  }
+  
+  return false;
+}
+
 /* app funcs */
 
 /**
@@ -512,8 +574,6 @@ function importSpreadsheet(fileid){
      return err2str(e);
   }
   
-
-  
   SpreadsheetApp.flush();
   return true;
 }
@@ -581,6 +641,10 @@ function initConfig() {
       case 'remove_blacklist_contacts_from_my_contacts':
       case 'add_paid_sender_to_whitelist':
       case 'log':
+      case 'request_payments':
+      case 'autoreply_quote':
+      case 'payment_received_star':
+      case 'autoreply_paid':
         config[k] = yesRegex.test(rows[i][2].toString().trim());
         break;
       
@@ -816,7 +880,7 @@ function _processInbox(){
       row,
       recd,
       autoreplyLimitMs = config.autoreply_limit_days * 86400000,
-      i, j, k, x, y,
+      i, j, k, x, y, v,
       threads,
       thread,
       threadId,
@@ -824,12 +888,15 @@ function _processInbox(){
       messages,
       message,
       from,
+      from2,
       sheet = constants.ss.getSheetByName(constants.sheets.bounced.name),
       sheetRowStart = constants.sheets.paid.headerRows + 1,
       sheetdata = {
         threadId: sheet.getRange(sheetRowStart, 1, sheet.getLastRow()).getValues(),
         from: sheet.getRange(sheetRowStart, 3, sheet.getLastRow()).getValues(),
-        received: sheet.getRange(sheetRowStart, 7, sheet.getLastRow()).getValues()
+        btcaddress: sheet.getRange(sheetRowStart, 4, sheet.getLastRow()).getValues(),
+        received: sheet.getRange(sheetRowStart, 7, sheet.getLastRow()).getValues(),
+        bounced: sheet.getRange(sheetRowStart, 8, sheet.getLastRow()).getValues()
       },
       sheetPaidData = {
         threadId: constants.ss.getSheetByName(constants.sheets.paid.name).getRange(constants.sheets.paid.headerRows + 1, 1, sheet.getLastRow()).getValues()
@@ -851,7 +918,8 @@ function _processInbox(){
       aborted = false,
       cannotreply = false,
       sent,
-      myaddy = getMyEmailAddresses();
+      myaddy = getMyEmailAddresses(),
+      quote;
   
   // thread processing loop
   do  {
@@ -872,13 +940,13 @@ function _processInbox(){
       message = messages[i][0];
       from = from2email(message.getFrom());
       if (! from) continue;
-
+      
       // ignore whitelisted contacts
       if (config.lists.whitelist.emails.indexOf(from) !== -1) continue;
       
       thread = message.getThread();
       threadId = thread.getId();
-      
+
       // bogus thread id or already paid thread
       if (! threadId || (sheetCacheIndexOf(sheetPaidData.threadId, threadId) !== -1)) continue;
       
@@ -887,6 +955,13 @@ function _processInbox(){
       threadLabelsNames = [];
       for (x = 0, y = threadLabels.length; x < y; x++) threadLabelsNames.push(threadLabels[x].getName());
       if (threadLabelsNames.indexOf(config.payment_received_label) !== -1) continue;
+
+      todo = {
+        addrow: true,
+        bounce: !!config.autoreply_template,
+        label: true,
+        archive: true
+      };
       
       // ignore if original message has been replied to manually by user and does not have pending payment label
       if (threadLabelsNames.indexOf(config.payment_pending_label) === -1){
@@ -899,13 +974,6 @@ function _processInbox(){
         }
         if (ignore) continue;
       }
-
-      todo = {
-        addrow: true,
-        bounce: true,
-        label: true,
-        archive: true
-      };
       
       // blacklisted? just archive it
       if (config.lists.blacklist.emails.indexOf(from) !== -1){
@@ -913,70 +981,126 @@ function _processInbox(){
         todo.bounce = false;
         todo.label = false;
       }
-      
+
       // duplicate thread id means we got a reply to our autoreply. don't bounce or track it
       if ((todo.addrow || todo.bounce) && sheetCacheIndexOf(sheetdata.threadId, threadId) !== -1){
         todo.addrow = false;
         todo.bounce = false;
       }
       
-      // don't autoreply if this sender's last email was within X days
-      // (assumes sheetdata is still sorted by the newest first)
+      // more should bounce checking
       recd = null;
-      if (todo.bounce && ((recd = sheetCacheIndexOf(sheetdata.from, from)) !== -1)){
-        recd = sheetdata.received[recd] ? sheetdata.received[recd][0] : '';
-        if (recd &&
-           (recd = new Date(recd)) &&
-           (recd.getTime() + autoreplyLimitMs > now.getTime())){
-          todo.bounce = false;
+      bouncedate = null;
+      if (todo.bounce){
+        // don't autoreply if this sender's last email or our last autoreply was within X days
+        for (x = 0, y = sheetdata.from.length; x < y; x++){
+          if(sheetdata.from[x][0] !== from) continue;
+          bouncedate = sheetdata.bounced[x] ? sheetdata.bounced[x][0] : '';
+          recd = sheetdata.received[x] ? sheetdata.received[x][0] : '';
+          if ((recd && (recd = new Date(recd)) && ((recd.getTime() + autoreplyLimitMs) > now.getTime())) ||
+            (bouncedate && (bouncedate = new Date(bouncedate)) && ((bouncedate.getTime() + autoreplyLimitMs) > now.getTime()))){
+            todo.bounce = false;
+            break;
+          }
+        }
+
+        // double check if the payment-pending thread has already been autoreplied to via messages,
+        // have been seeing errors with written spreadsheet data not being persisted
+        if (todo.bounce && (threadLabelsNames.indexOf(config.payment_pending_label) !== -1) && messages[i].length > 1){
+          for(x = 1, y = messages[i].length; x < y; x++){
+            v = x + 1 === y ? true : false; // is-last-message-in-thread flag
+            from2 = from2email(messages[i][x].getFrom());
+            
+            // don't bounce if:
+            // - the last message is our autoreply
+            // - the last message is not from the original sender
+            // - if any of the original sender's replies are within X days
+            if ((v && (myaddy.indexOf(from2) !== -1)) ||
+                (v && (from !== from2)) ||
+                (from === from2 && (recd = messages[i][x].getDate()) && ((recd.getTime() + autoreplyLimitMs) > now.getTime()))){
+              todo.bounce = false;
+              break;
+            }
+          }
         }
       }
       
+      // don't autoreply to any thread containing an external autoreply
+      if (todo.bounce && ! cannotreply && isExternalAutoreply(messages[i])){
+        todo.bounce = false;
+        
+        // don't archive/label if it's not already pending payment
+        if (threadLabelsNames.indexOf(config.payment_pending_label) === -1){
+          todo.archive = false;
+          todo.label = false;
+          todo.addrow = false;
+        }
+      }
+
       amount = '';
       btcaddress = '';
       bouncedate = '';
       
       // autoreply
       if (todo.bounce){
-        // reached daily email limit? then leave this email untouched for next run
-        if (cannotreply) break;
-        
-        amount = config.bitcoin_amount;
-        
-        // get bitcoin receive address        
-        err = '';
-        try{
-          apiresult = UrlFetchApp.fetch(btcaddressUrl).getContentText(); // ~.3s
-          btcaddress = JSON.parse(apiresult).input_address;
-        }
-        catch(e){
-          err = e.toString();
-        }
+        if (config.request_payments){
+          // reached daily email limit? then leave this email untouched for next run
+          if (cannotreply) continue;
           
-        if (! btcaddress || err){
-          log.errors.push([arguments.callee.name + ': failed to get Bitcoin address from API', JSON.stringify(apiresult, null, 2), err2str(err), url].join("\n"));
-          continue;
+          amount = config.bitcoin_amount;
+          
+          // get unique bitcoin receive address       
+          // consants.bitcoinReceiveAddressAttempts
+          for(x = constants.bitcoinReceiveAddressAttempts; x > 0; x--){
+            err = '';
+            try{
+              apiresult = UrlFetchApp.fetch(btcaddressUrl).getContentText(); // ~.3s
+              btcaddress = JSON.parse(apiresult).input_address;
+            }
+            catch(e){
+              err = e.toString();
+              continue;
+            }
+            
+            // is it unique?
+            if (! btcaddress || (sheetCacheIndexOf(sheetdata.btcaddress, btcaddress) !== -1)){
+              err = 'Generated Bitcoin address was empty or not unique: ' + btcaddress;
+              continue;  
+            }
+          }
+          
+          if (! btcaddress || err){
+            log.errors.push([arguments.callee.name + ': failed to get Bitcoin address from API', JSON.stringify(apiresult, null, 2), err2str(err), btcaddressUrl].join("\n"));
+            continue;
+          }
+          
+          // if the checkPayments function is going to be executed later this run,
+          // don't check for this address yet
+          constants.checkPayments.excludeAddress.push(btcaddress);
         }
-        
-        // if the checkPayments function is going to be executed later this run,
-        // don't check for this address yet
-        constants.checkPayments.excludeAddress.push(btcaddress);
         
         body = config.autoreply_template
         .replace('{BITCOIN_AMOUNT_BITS}', (config.bitcoin_amount * constants.bitcoinBitsMultiplier).toFixed(0))
         .replace('{EXPIRE_DAYS}', config.expire_days)
         .replace('{BITCOIN_QR_CODE_URL}', constants.bitcoinQrCodeApiUrl)
         .replace(/\r?\n/g, "\r\n");
-        
+                
         // replace address/amount in body + url in one shot
-        body = body.replace(/{BITCOIN_ADDRESS}/g, btcaddress)
-        .replace(/{BITCOIN_AMOUNT}/g, config.bitcoin_amount);
+        body = body.replace(/{BITCOIN_ADDRESS}/g, btcaddress).replace(/{BITCOIN_AMOUNT}/g, config.bitcoin_amount);
         
         bouncedate = ISODateString(now);
 
         // use html?
         replyOpt = {};
         if (config.autoreply_html) replyOpt.htmlBody = body.split("\n").join("<br/>");
+        
+        // quote message?
+        if (config.autoreply_quote){
+          quote = quoteMessage(message);
+          body += "\n\n" + quote;
+          if (config.autoreply_html) replyOpt.htmlBody += '<br><br>' + quote;
+        }
+        
         sent = true;
         
         try{
@@ -1028,9 +1152,10 @@ function _processInbox(){
         ]);
         
         // update cached spreadsheet data
-        sheetdata.threadId.push([threadId]);
-        sheetdata.from.push([from]);
-        sheetdata.received.push([recd]);
+        sheetdata.threadId.unshift([threadId]);
+        sheetdata.from.unshift([from]);
+        sheetdata.received.unshift([recd]);
+        sheetdata.btcaddress.unshift([btcaddress]);
       }
       log.emailsProcessed++;
     }
@@ -1052,6 +1177,7 @@ function _processInbox(){
 
   // sort the sheet by received desc, easier for users to read
   sheet.sort(7, false);
+  SpreadsheetApp.flush();
 }
 
 /**
@@ -1134,6 +1260,9 @@ function _checkPayments(){
       range,
       aborted = false,
       execLimitWindow = 120000; // milliseconds prior to execution limit to abort
+  
+  // payments functionality enabled?
+  if (! config.request_payments) return;
   
   // enforce minimum check payments frequency
   checkfreq = (config.check_payments_frequency < constants.checkPayments.frequencyMin ? 
@@ -1314,15 +1443,19 @@ function _checkPayments(){
     // reload full sheet data
     sheetdata = sheetbounced.getRange(constants.sheets.bounced.headerRows + 1, 1, sheetbounced.getLastRow(), sheetbounced.getLastColumn()).getValues();
     
-    handlePaidThread = function(thread, threadId, row, from, moveToPaid, checkPromoteSender){
-      var i, j, paidCount = 0;
+    handlePaidThread = function(thread, threadId, row, from, isPaymentReqThread, checkPromoteSender){
+      var i, j, message, body, paidCount = 0, replyOpt;
       
       thread.removeLabel(unpaidLabel);
       thread.addLabel(paidLabel);
       if (config.mark_flagged_threads_read) thread.markUnread();
+      if (config.payment_received_star){
+        message = thread.getMessages()[0];
+        if (message) message.star();
+      }
       
       // copy the bounced row into the paid sheet
-      if (moveToPaid && row.length){
+      if (isPaymentReqThread && row.length){
         // need to reformat hyperlink
         row[1] = getThreadSubjectHyperlinkValue(thread, row[1]);
         // change the status
@@ -1350,6 +1483,25 @@ function _checkPayments(){
           addContactEmailsToListCache(from, 'whitelist');
           syncListsToSpreadsheet({lists: ['whitelist', 'greylist'], removeDups: true, flush: false});
           log.sendersWhitelisted++;
+        }
+      }
+      
+      // send payment received autoreply for paid emails
+      if (config.autoreply_paid && config.autoreply_paid_template && isPaymentReqThread){
+        if (! message) message = thread.getMessages()[0];
+        body = config.autoreply_paid_template;
+
+        // use html?
+        replyOpt = {};
+        if (config.autoreply_html) replyOpt.htmlBody = body.split("\n").join("<br/>");
+        
+        try{
+          message.reply(body, replyOpt);
+        }
+        catch(e){
+          log.errors.push(arguments.callee.name + 
+           ' failed to send payment complete autoreply for threadId = ' + threadId + 
+           ', subject = ' + thread.getFirstMessageSubject() + ' : ' + err2str(e));
         }
       }
     }

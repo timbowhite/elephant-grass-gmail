@@ -5,6 +5,19 @@ Elephant Grass is an open-source Gmail script that requests Bitcoin payments fro
 Releases
 -------------
 
+2015-12-07 - [Elephant Grass v0.6](https://docs.google.com/spreadsheets/d/1_Qdl81gUV13enJTgM27TfnWmkZKMVKMN74lL-RpOzwI/copy?usp=sharing)
+
+  * bug fix: don't autoreply to autoreplies or google notifications 
+  * bug fix: retry Bitcoin address generation whenever address returned by BC.i is not unique
+  * bug fix: continue processing emails that need to be archived even if outgoing email quota reached 
+  * bug fix: fixed issue where "Autoreply Limit Days" config option was sometimes not respected if there were multiple unread messages in the inbox from the same sender
+  * more friendly default autoreply template
+  * new feature: make payment requests optional with new config option "Request Payments"
+  * new feature: ability to disable autoreplies by blanking out config option "Autoreply Template"
+  * new feature: include original sender's message in autoreply, see config option "Autoreply Quote Message"
+  * new feature: star emails that receive payment, see config option "Star Paid Emails"
+  * new feature: send 2nd autoreply when a payment is received, see config options "Autoreply When Paid" and "Autoreply When Paid Template"
+
 2015-06-05 - [Elephant Grass v0.5](https://docs.google.com/spreadsheets/d/1Ffn7O5y7iElzmRbj4LzVx4SMHpcyKK7NVi_RaJxoF2c/copy?usp=sharing)
 
   * bug fix: don't autoreply to messages that have been manually replied to by user
